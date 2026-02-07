@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:rota_desktop/widgets/top_action_bar.dart';
-import 'package:rota_desktop/widgets/center_drop_card.dart';
-import 'package:rota_desktop/screens/calendar_page.dart';
+import '../widgets/top_action_bar.dart';
+import '../widgets/center_drop_card.dart';
+import 'calendar_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -51,17 +51,12 @@ class _HomePageState extends State<HomePage> {
                   filterItems: addresses,
                   onFilterChanged: (v) => setState(() => selectedFilter = v),
                   primaryColor: cs.primary,
-
-                  // UPLOAD -> test için farklı mesaj
                   onUploadPressed: () {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('UPLOAD TIKLANDI')),
                     );
                   },
-
-                  // CALENDAR -> CalendarPage aç
                   onCalendarPressed: () {
-                    debugPrint("CALENDAR CLICKED");
                     Navigator.push(
                       context,
                       MaterialPageRoute(builder: (_) => const CalendarPage()),
@@ -110,14 +105,13 @@ class _HomePageState extends State<HomePage> {
                             'Adresleri yukarıdan sürükleyip buraya bırak.',
                         onDropAddress: (v) {
                           setState(() {
-                            if (!dropped.contains(v)) {
-                              dropped.add(v);
-                            }
+                            if (!dropped.contains(v)) dropped.add(v);
                           });
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(content: Text('Eklendi: $v')),
                           );
                         },
+                        droppedAddresses: dropped,
                       ),
                     ),
                   ),

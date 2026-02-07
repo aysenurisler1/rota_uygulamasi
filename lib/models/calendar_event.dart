@@ -1,32 +1,34 @@
-class CalendarEvent {
-  final String id;
-  final String title; // adres adı
-  final DateTime start; // seçilen gün + saat
-  final int durationMinutes; // şimdilik 30 dk
-  final RepeatType repeat;
+enum RepeatType { none, daily, weekly, monthly }
 
-  const CalendarEvent({
-    required this.id,
-    required this.title,
-    required this.start,
-    required this.durationMinutes,
-    required this.repeat,
-  });
-}
-
-enum RepeatType { once, weekly, monthly }
-
-extension RepeatTypeText on RepeatType {
+extension RepeatTypeLabel on RepeatType {
   String get label {
     switch (this) {
-      case RepeatType.once:
-        return 'Tek seferlik';
+      case RepeatType.none:
+        return 'Tek Sefer';
+      case RepeatType.daily:
+        return 'Günlük';
       case RepeatType.weekly:
-        return 'Haftada 1';
+        return 'Haftalık';
       case RepeatType.monthly:
-        return 'Ayda 1';
+        return 'Aylık';
     }
   }
 }
 
-//x
+class CalendarEvent {
+  final String title;
+  final DateTime start;
+  final DateTime end;
+  final RepeatType repeat;
+
+  // opsiyonel not
+  final String? note;
+
+  CalendarEvent({
+    required this.title,
+    required this.start,
+    required this.end,
+    this.repeat = RepeatType.none,
+    this.note,
+  });
+}
