@@ -117,8 +117,10 @@ class LoginPage extends StatelessWidget {
             bottom: 24,
             child: FilledButton.tonal(
               style: FilledButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 12,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(18),
                 ),
@@ -136,7 +138,7 @@ class LoginPage extends StatelessWidget {
                       TextButton(
                         onPressed: () => Navigator.pop(context),
                         child: const Text('Kapat'),
-                      )
+                      ),
                     ],
                   ),
                 );
@@ -149,3 +151,5 @@ class LoginPage extends StatelessWidget {
     );
   }
 }
+
+//x

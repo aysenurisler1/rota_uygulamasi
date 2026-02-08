@@ -2,24 +2,21 @@ import 'package:flutter/material.dart';
 import 'screens/login_page.dart';
 
 void main() {
-  runApp(const RotaApp());
+  runApp(const MyApp());
 }
 
-class RotaApp extends StatelessWidget {
-  const RotaApp({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    const seed = Color(0xFF6FBF73); // yeşil ton
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Rota Desktop',
       theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF66B36A)),
         useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: seed),
-        scaffoldBackgroundColor: const Color(0xFFE8F2EA),
       ),
-home: LoginPage(),
+      home: const LoginPage(),
     );
   }
 }
