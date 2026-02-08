@@ -13,6 +13,19 @@ extension RepeatTypeLabel on RepeatType {
         return 'Aylık';
     }
   }
+
+  String get short {
+    switch (this) {
+      case RepeatType.none:
+        return 'Tek';
+      case RepeatType.daily:
+        return 'Gün';
+      case RepeatType.weekly:
+        return 'Hafta';
+      case RepeatType.monthly:
+        return 'Ay';
+    }
+  }
 }
 
 class CalendarEvent {
@@ -21,7 +34,6 @@ class CalendarEvent {
   final DateTime end;
   final RepeatType repeat;
 
-  // opsiyonel not
   final String? note;
 
   CalendarEvent({

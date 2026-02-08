@@ -13,8 +13,11 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF66B36A)),
         useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF66B36A)),
+        inputDecorationTheme: const InputDecorationTheme(
+          border: OutlineInputBorder(),
+        ),
       ),
       home: const LoginPage(),
     );

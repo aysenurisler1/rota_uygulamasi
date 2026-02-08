@@ -9,6 +9,10 @@ class TopActionBar extends StatelessWidget {
     required this.primaryColor,
     required this.onUploadPressed,
     required this.onCalendarPressed,
+    this.onInfoPressed, // ✅ NEW
+    this.selectedCount = 0,
+    this.maxCount = 20,
+    this.syncStatus = 'Senkronlandı',
   });
 
   final String filterValue;
@@ -19,8 +23,24 @@ class TopActionBar extends StatelessWidget {
   final VoidCallback onUploadPressed;
   final VoidCallback onCalendarPressed;
 
+  final VoidCallback? onInfoPressed; // ✅ NEW
+
+  final int selectedCount;
+  final int maxCount;
+  final String syncStatus;
+
   @override
   Widget build(BuildContext context) {
+    final c = primaryColor;
+
+    final warn = selectedCount >= (maxCount - 3) && selectedCount < maxCount;
+    final full = selectedCount >= maxCount;
+    final badgeColor = full
+        ? Colors.red
+        : warn
+        ? Colors.orange
+        : c;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -37,7 +57,6 @@ class TopActionBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Sol: Filtre Dropdown
           Expanded(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -62,8 +81,7 @@ class TopActionBar extends StatelessWidget {
                       )
                       .toList(),
                   onChanged: (v) {
-                    if (v == null) return;
-                    onFilterChanged(v);
+                    if (v != null) onFilterChanged(v);
                   },
                 ),
               ),
@@ -72,18 +90,40 @@ class TopActionBar extends StatelessWidget {
 
           const SizedBox(width: 12),
 
-          // Sağ: Aksiyonlar
+          _Pill(icon: Icons.cloud_done_outlined, text: syncStatus, color: c),
+
+          const SizedBox(width: 10),
+
+          _Pill(
+            icon: Icons.playlist_add_check,
+            text: '$selectedCount/$maxCount',
+            color: badgeColor,
+          ),
+
+          const SizedBox(width: 12),
+
+          // ✅ NEW: Info button (opsiyonel)
+          if (onInfoPressed != null) ...[
+            _ActionIconButton(
+              tooltip: 'Uygulama Bilgisi',
+              icon: Icons.info_outline,
+              color: c,
+              onPressed: onInfoPressed!,
+            ),
+            const SizedBox(width: 8),
+          ],
+
           _ActionIconButton(
-            tooltip: 'Yükle',
+            tooltip: 'Excel Yükle',
             icon: Icons.upload_file,
-            color: primaryColor,
+            color: c,
             onPressed: onUploadPressed,
           ),
           const SizedBox(width: 8),
           _ActionIconButton(
             tooltip: 'Takvim',
             icon: Icons.calendar_month,
-            color: primaryColor,
+            color: c,
             onPressed: onCalendarPressed,
           ),
         ],
@@ -92,7 +132,42 @@ class TopActionBar extends StatelessWidget {
   }
 }
 
-class _ActionIconButton extends StatelessWidget {
+class _Pill extends StatelessWidget {
+  const _Pill({required this.icon, required this.text, required this.color});
+
+  final IconData icon;
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withOpacity(0.20)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionIconButton extends StatefulWidget {
   const _ActionIconButton({
     required this.tooltip,
     required this.icon,
@@ -106,25 +181,48 @@ class _ActionIconButton extends StatelessWidget {
   final VoidCallback onPressed;
 
   @override
+  State<_ActionIconButton> createState() => _ActionIconButtonState();
+}
+
+class _ActionIconButtonState extends State<_ActionIconButton> {
+  bool _hover = false;
+
+  @override
   Widget build(BuildContext context) {
+    final c = widget.color;
+
     return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onPressed,
-        child: Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: color.withOpacity(0.25)),
+      message: widget.tooltip,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hover = true),
+        onExit: (_) => setState(() => _hover = false),
+        cursor: SystemMouseCursors.click,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: widget.onPressed,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            curve: Curves.easeOut,
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: c.withOpacity(_hover ? 0.18 : 0.12),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: c.withOpacity(_hover ? 0.35 : 0.25)),
+              boxShadow: _hover
+                  ? const [
+                      BoxShadow(
+                        blurRadius: 10,
+                        offset: Offset(0, 6),
+                        color: Colors.black12,
+                      ),
+                    ]
+                  : const [],
+            ),
+            child: Icon(widget.icon, color: c),
           ),
-          child: Icon(icon, color: color),
         ),
       ),
     );
   }
 }
-
-//x

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/calendar_event.dart';
+import '../data/address_store.dart';
 
 class CalendarPage extends StatefulWidget {
   const CalendarPage({super.key});
@@ -10,12 +11,9 @@ class CalendarPage extends StatefulWidget {
 
 class _CalendarPageState extends State<CalendarPage> {
   // Üst dropdown
-  final List<String> addresses = const [
-    'Adresler',
-    'Bornova - Ev 1',
-    'Karşıyaka - Ev 2',
-    'Buca - Ev 3',
-  ];
+  // ✅ Demo liste yerine ortak havuz (haritadan seçilenler burada birikir)
+  List<String> get addresses => AddressStore.items;
+
   String selectedAddress = 'Adresler';
 
   late DateTime weekStart; // Pazartesi
@@ -42,6 +40,11 @@ class _CalendarPageState extends State<CalendarPage> {
       (i) => _dateOnly(weekStart.add(Duration(days: i))),
     );
     final monthLabel = '${_monthName(days[0].month)} ${days[0].year}';
+
+    // ✅ DropdownButton crash olmasın: value listede yoksa resetle
+    if (!addresses.contains(selectedAddress)) {
+      selectedAddress = 'Adresler';
+    }
 
     return Scaffold(
       body: SafeArea(
@@ -856,7 +859,7 @@ class _CalendarPageState extends State<CalendarPage> {
 
   String _hhmm(DateTime dt) {
     final h = dt.hour.toString().padLeft(2, '0');
-    final m = dt.minute.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0'); // ✅ FIX
     return '$h:$m';
   }
 }

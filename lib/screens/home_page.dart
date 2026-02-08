@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
-import '../widgets/top_action_bar.dart';
+
+import '../data/address_store.dart';
+import '../models/calendar_event.dart';
 import '../widgets/center_drop_card.dart';
+import '../widgets/top_action_bar.dart';
 import 'calendar_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -11,22 +14,274 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final List<String> addresses = const [
-    'Adresler',
-    'Bornova - Ev 1',
-    'Karşıyaka - Ev 2',
-    'Buca - Ev 3',
-  ];
+  static const int maxDaily = 20;
 
+  // Üstte görünen draggable kartlar
+  final List<String> addressCards = [];
+
+  // Dropdown havuzu (dinamik)
+  final List<String> filterItems = ['Adresler'];
   String selectedFilter = 'Adresler';
-  String selectedAddress = 'Adres Seç';
 
-  // Drop edilen adresleri tutar
+  // Günlük plan (drop alanı)
   final List<String> dropped = [];
+  final Map<String, RepeatType> repeatByAddress = {};
+
+  String syncStatus = 'Senkronlandı';
+
+  // Search (CenterDropCard için)
+  final TextEditingController searchCtrl = TextEditingController();
+  bool isSearching = false;
+  List<String> suggestions = [];
+
+  // ✅ Yeni: başlangıç adresi seçimi (null => START / cihaz konumu)
+  String? selectedStartAddress;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Store’daki adresleri dropdown’a çek
+    for (final a in AddressStore.items) {
+      if (!filterItems.contains(a)) filterItems.add(a);
+    }
+
+    searchCtrl.addListener(() {
+      final q = searchCtrl.text.trim();
+      if (q.isEmpty) {
+        setState(() => suggestions = []);
+        return;
+      }
+
+      setState(() => isSearching = true);
+
+      // UI-only suggestion
+      Future.delayed(const Duration(milliseconds: 220), () {
+        if (!mounted) return;
+
+        final query = searchCtrl.text.trim();
+        if (query.isEmpty) {
+          setState(() {
+            suggestions = [];
+            isSearching = false;
+          });
+          return;
+        }
+
+        setState(() {
+          suggestions = [
+            '$query, İzmir',
+            '$query Mah., İzmir',
+            '$query Cad., Bornova/İzmir',
+            '$query Sok., Karşıyaka/İzmir',
+            '$query No:12, Konak/İzmir',
+          ];
+          isSearching = false;
+        });
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    searchCtrl.dispose();
+    super.dispose();
+  }
+
+  // Tek yerden ekleme: store + dropdown + kartlar
+  void _addAddressToPoolAndCards(String address) {
+    final a = address.trim();
+    if (a.isEmpty) return;
+
+    setState(() {
+      AddressStore.add(a);
+
+      if (!filterItems.contains(a)) {
+        filterItems.add(a);
+      }
+
+      if (!addressCards.contains(a)) {
+        addressCards.insert(0, a);
+      }
+
+      if (!filterItems.contains(selectedFilter)) {
+        selectedFilter = 'Adresler';
+      }
+
+      syncStatus = 'Senkronlandı';
+    });
+  }
+
+  void _dropAddress(String value) {
+    if (dropped.length >= maxDaily) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Günlük limit dolu (20).')));
+      return;
+    }
+
+    if (!dropped.contains(value)) {
+      setState(() {
+        dropped.add(value);
+
+        // Başlangıç daha önce seçildiyse ama listeden silindiyse reset (safety)
+        if (selectedStartAddress != null &&
+            !dropped.contains(selectedStartAddress)) {
+          selectedStartAddress = null;
+        }
+      });
+    }
+  }
+
+  void _showAppInfo(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.82,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    SizedBox(height: 8),
+                    Text(
+                      'Uygulama Bilgisi',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    SizedBox(height: 10),
+                    _InfoSection(
+                      title: 'Genel',
+                      body:
+                          'Uygulama, masaüstü + mobil olmak üzere iki parçadan oluşan bir rota planlama ve navigasyon sistemidir.',
+                    ),
+                    _InfoSection(
+                      title: 'Adres Havuzu',
+                      body:
+                          'Adresler veritabanında tutulur ve gerektiğinde Excel ile toplu içeri alınabilir. Toplam adres sayısı 5000+ olabilir; ancak günlük rota pratikte ~20 adres ile sınırlıdır.',
+                    ),
+                    _InfoSection(
+                      title: 'Optimizasyon Hedefi',
+                      body:
+                          '“En kısa rota” toplam süre minimizasyonudur (mesafe değil). Başlangıç/bitiş kullanıcıdan sabit alınmaz: mobilde cihaz konumu başlangıç kabul edilir ve rota başlangıca geri döner.',
+                    ),
+                    _InfoSection(
+                      title: 'Masaüstü vs Mobil',
+                      body:
+                          'Masaüstü planlar (takvim + havuz) → mobil navigasyon yapar (uygulama içi). Aynı hesapla senkron çalışır.',
+                    ),
+                    SizedBox(height: 8),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _runDemoRoute() {
+    // Eğer başlangıç hiç seçilmediyse, null kalsın (START)
+    // İstersen default olarak dropped.first yapabilirsin:
+    // selectedStartAddress ??= dropped.isNotEmpty ? dropped.first : null;
+
+    showDialog(
+      context: context,
+      builder: (_) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            final result = buildBestRouteDemo(
+              dropped,
+              startAddress: selectedStartAddress,
+            );
+
+            return AlertDialog(
+              title: const Text('Örnek Rota (Süre Minimizasyonu)'),
+              content: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Başlangıç Adresi',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF6F7F6),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.black12),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String?>(
+                          value: selectedStartAddress,
+                          isExpanded: true,
+                          items: [
+                            const DropdownMenuItem<String?>(
+                              value: null,
+                              child: Text('START (Cihaz konumu)'),
+                            ),
+                            ...dropped.map(
+                              (a) => DropdownMenuItem<String?>(
+                                value: a,
+                                child: Text(a, overflow: TextOverflow.ellipsis),
+                              ),
+                            ),
+                          ],
+                          onChanged: (v) {
+                            setLocal(() => selectedStartAddress = v);
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Text('Toplam süre: ${result.totalMinutes} dk'),
+                    const SizedBox(height: 10),
+                    Text(result.prettyPath),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Kapat'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+
+    if (!filterItems.contains(selectedFilter)) {
+      selectedFilter = 'Adresler';
+    }
+
+    // Başlangıç adresi seçilmiş ama artık dropped içinde değilse reset (safety)
+    if (selectedStartAddress != null &&
+        !dropped.contains(selectedStartAddress)) {
+      selectedStartAddress = null;
+    }
 
     return Scaffold(
       body: SafeArea(
@@ -40,7 +295,6 @@ class _HomePageState extends State<HomePage> {
           ),
           child: Column(
             children: [
-              // ÜST BAR
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 20,
@@ -48,90 +302,141 @@ class _HomePageState extends State<HomePage> {
                 ),
                 child: TopActionBar(
                   filterValue: selectedFilter,
-                  filterItems: addresses,
-                  onFilterChanged: (v) => setState(() => selectedFilter = v),
+                  filterItems: filterItems,
+                  onFilterChanged: (v) {
+                    setState(() => selectedFilter = v);
+                    if (v != 'Adresler') {
+                      _addAddressToPoolAndCards(v);
+                    }
+                  },
                   primaryColor: cs.primary,
+                  selectedCount: dropped.length,
+                  maxCount: maxDaily,
+                  syncStatus: syncStatus,
+                  onInfoPressed: () => _showAppInfo(context),
                   onUploadPressed: () {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('UPLOAD TIKLANDI')),
+                      const SnackBar(
+                        content: Text('Excel import ekranı (sonra).'),
+                      ),
                     );
                   },
                   onCalendarPressed: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(builder: (_) => const CalendarPage()),
-                    );
+                    ).then((_) {
+                      setState(() {
+                        for (final a in AddressStore.items) {
+                          if (!filterItems.contains(a)) filterItems.add(a);
+                        }
+                      });
+                    });
                   },
                 ),
               ),
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
-              // SÜRÜKLENEBİLİR ADRES KARTLARI
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Wrap(
                   spacing: 12,
                   runSpacing: 12,
-                  children: const [
-                    _DraggableAddressCard(text: 'Bornova - Ev 1'),
-                    _DraggableAddressCard(text: 'Karşıyaka - Ev 2'),
-                    _DraggableAddressCard(text: 'Buca - Ev 3'),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // ORTA DROP ALANI
-              Expanded(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 560),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: CenterDropCard(
-                        title: 'Adres Sürükle',
-                        dropdownValue: selectedAddress,
-                        dropdownItems: const [
-                          'Adres Seç',
-                          'Bornova - Ev 1',
-                          'Karşıyaka - Ev 2',
-                          'Buca - Ev 3',
-                        ],
-                        onDropdownChanged: (v) =>
-                            setState(() => selectedAddress = v),
-                        helperText:
-                            'Adresleri yukarıdan sürükleyip buraya bırak.',
-                        onDropAddress: (v) {
-                          setState(() {
-                            if (!dropped.contains(v)) dropped.add(v);
-                          });
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Eklendi: $v')),
-                          );
-                        },
-                        droppedAddresses: dropped,
+                  children: addressCards.map((a) {
+                    return Draggable<String>(
+                      data: a,
+                      feedback: Material(
+                        color: Colors.transparent,
+                        child: _AddressChip(text: a, ghost: true),
                       ),
-                    ),
-                  ),
+                      childWhenDragging: Opacity(
+                        opacity: 0.35,
+                        child: _AddressChip(text: a),
+                      ),
+                      child: _AddressChip(
+                        text: a,
+                        onRemove: () {
+                          setState(() {
+                            addressCards.remove(a);
+                            AddressStore.remove(a);
+                            filterItems.remove(a);
+
+                            // Eğer başlangıç olarak seçiliyse resetle
+                            if (selectedStartAddress == a) {
+                              selectedStartAddress = null;
+                            }
+
+                            if (!filterItems.contains(selectedFilter)) {
+                              selectedFilter = 'Adresler';
+                            }
+                          });
+                        },
+                      ),
+                    );
+                  }).toList(),
                 ),
               ),
 
-              // SEÇİLENLER (ALTTA GÖSTERİM)
-              if (dropped.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Seçilenler: ${dropped.join(" • ")}',
-                      style: TextStyle(color: Colors.grey.shade700),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+              const SizedBox(height: 12),
+
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: CenterDropCard(
+                          title: 'Günlük Plan',
+                          droppedAddresses: dropped,
+                          onDropAddress: _dropAddress,
+                          maxCount: maxDaily,
+                          repeatByAddress: repeatByAddress,
+                          searchController: searchCtrl,
+                          suggestions: suggestions,
+                          isSearching: isSearching,
+                          onSuggestionTap: (s) {
+                            _addAddressToPoolAndCards(s);
+                            setState(() {
+                              searchCtrl.clear();
+                              suggestions = [];
+                            });
+                          },
+                          helperText:
+                              'Kartları buraya sürükle. (Hedef: süre minimizasyonu)',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: dropped.isEmpty
+                                  ? null
+                                  : () => setState(() {
+                                      dropped.clear();
+                                      repeatByAddress.clear();
+                                      selectedStartAddress = null;
+                                    }),
+                              icon: const Icon(Icons.delete_outline),
+                              label: const Text('Temizle'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: dropped.isEmpty ? null : _runDemoRoute,
+                              icon: const Icon(Icons.route),
+                              label: const Text('Rota Oluştur'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                   ),
                 ),
+              ),
             ],
           ),
         ),
@@ -140,39 +445,206 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-// SÜRÜKLENEBİLİR KART
-class _DraggableAddressCard extends StatelessWidget {
-  final String text;
+class _AddressChip extends StatelessWidget {
+  const _AddressChip({required this.text, this.onRemove, this.ghost = false});
 
-  const _DraggableAddressCard({required this.text});
+  final String text;
+  final VoidCallback? onRemove;
+  final bool ghost;
 
   @override
   Widget build(BuildContext context) {
-    return Draggable<String>(
-      data: text,
-      feedback: Material(color: Colors.transparent, child: _card(active: true)),
-      childWhenDragging: Opacity(opacity: 0.4, child: _card()),
-      child: _card(),
-    );
-  }
+    final cs = Theme.of(context).colorScheme;
 
-  Widget _card({bool active = false}) {
     return Container(
-      width: 160,
-      padding: const EdgeInsets.all(14),
+      constraints: const BoxConstraints(maxWidth: 280),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: active ? const Color(0xFFE0F2E5) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.black12),
+        color: Colors.white.withOpacity(ghost ? 0.9 : 1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: cs.primary.withOpacity(0.18)),
         boxShadow: const [
-          BoxShadow(blurRadius: 6, offset: Offset(0, 4), color: Colors.black12),
+          BoxShadow(
+            blurRadius: 10,
+            offset: Offset(0, 6),
+            color: Colors.black12,
+          ),
         ],
       ),
-      child: Text(
-        text,
-        textAlign: TextAlign.center,
-        style: const TextStyle(fontWeight: FontWeight.w500),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.place_outlined, color: cs.primary),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+          if (onRemove != null) ...[
+            const SizedBox(width: 6),
+            IconButton(
+              tooltip: 'Sil',
+              onPressed: onRemove,
+              icon: const Icon(Icons.close),
+            ),
+          ],
+        ],
       ),
     );
   }
+}
+
+class _InfoSection extends StatelessWidget {
+  const _InfoSection({required this.title, required this.body});
+
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          Text(
+            body,
+            style: const TextStyle(color: Colors.black87, height: 1.35),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// ===============================
+///  DEMO ROTA ALGORİTMASI
+///  Nearest Neighbor + 2-opt
+///  Başlangıç adresi seçilebilir
+/// ===============================
+
+class RouteResult {
+  RouteResult({required this.path, required this.totalMinutes});
+  final List<String> path;
+  final int totalMinutes;
+
+  String get prettyPath => path.join(' → ');
+}
+
+// Aynı adres çiftine stabil “süre” üret (demo)
+int _stableMinutes(String a, String b) {
+  int hash = 0;
+  final s = '$a|$b';
+  for (int i = 0; i < s.length; i++) {
+    hash = (hash * 31 + s.codeUnitAt(i)) & 0x7fffffff;
+  }
+  // 6–38 dk arası
+  return 6 + (hash % 33);
+}
+
+int _time(String a, String b) {
+  if (a == b) return 0;
+  return _stableMinutes(a, b);
+}
+
+int _tourCost(List<String> path) {
+  int sum = 0;
+  for (int i = 0; i < path.length - 1; i++) {
+    sum += _time(path[i], path[i + 1]);
+  }
+  return sum;
+}
+
+// ✅ Başlangıç parametreli nearest neighbor turu
+List<String> _nearestNeighborTour(List<String> stops, String start) {
+  final unvisited = stops.toSet();
+
+  // start stops içinde yoksa ekle
+  if (!unvisited.contains(start)) {
+    unvisited.add(start);
+  }
+
+  unvisited.remove(start);
+
+  final route = <String>[start];
+
+  String current = start;
+  while (unvisited.isNotEmpty) {
+    String? best;
+    int bestCost = 1 << 30;
+
+    for (final cand in unvisited) {
+      final c = _time(current, cand);
+      if (c < bestCost) {
+        bestCost = c;
+        best = cand;
+      }
+    }
+
+    route.add(best!);
+    unvisited.remove(best);
+    current = best;
+  }
+
+  route.add(start); // geri dön
+  return route;
+}
+
+List<String> _twoOpt(List<String> path) {
+  if (path.length <= 4) return path;
+
+  bool improved = true;
+  List<String> best = List<String>.from(path);
+  int bestCost = _tourCost(best);
+
+  while (improved) {
+    improved = false;
+
+    for (int i = 1; i < best.length - 2; i++) {
+      for (int k = i + 1; k < best.length - 1; k++) {
+        final candidate = <String>[
+          ...best.sublist(0, i),
+          ...best.sublist(i, k + 1).reversed,
+          ...best.sublist(k + 1),
+        ];
+
+        final candCost = _tourCost(candidate);
+        if (candCost < bestCost) {
+          best = candidate;
+          bestCost = candCost;
+          improved = true;
+        }
+      }
+    }
+  }
+
+  return best;
+}
+
+RouteResult buildBestRouteDemo(List<String> dropped, {String? startAddress}) {
+  final stops = dropped
+      .map((e) => e.trim())
+      .where((e) => e.isNotEmpty)
+      .toSet()
+      .toList();
+
+  // start seçildiyse ve stops içinde varsa onu kullan, yoksa START
+  final String start = (startAddress != null && stops.contains(startAddress))
+      ? startAddress
+      : 'START';
+
+  // Eğer start bir adresse, zaten stops içinde.
+  // Eğer START ise, START'ı düğüm gibi düşünerek tur atıyoruz.
+  final List<String> nodes = (start == 'START') ? ['START', ...stops] : stops;
+
+  final nn = _nearestNeighborTour(nodes, start);
+  final improved = _twoOpt(nn);
+
+  return RouteResult(path: improved, totalMinutes: _tourCost(improved));
 }
