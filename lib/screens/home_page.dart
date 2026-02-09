@@ -5,6 +5,10 @@ import '../models/calendar_event.dart';
 import '../widgets/center_drop_card.dart';
 import '../widgets/top_action_bar.dart';
 import 'calendar_page.dart';
+import '../domain/routing/route_models.dart';
+import '../domain/routing/route_planner.dart';
+import '../data/routing/fake_travel_time_provider.dart';
+import '../data/routing/recorded_travel_time_provider.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -15,6 +19,8 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   static const int maxDaily = 20;
+  late final RecordedTravelTimeProvider _timeProvider;
+  late RoutePlanner _planner;
 
   // Üstte görünen draggable kartlar
   final List<String> addressCards = [];
@@ -40,6 +46,20 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    _timeProvider = RecordedTravelTimeProvider();
+
+    _timeProvider.loadFromAsset('test_data/travel_times.json').then((_) {
+      setState(() {
+        _planner = RoutePlanner(_timeProvider);
+
+        // JSON’daki adresleri havuza bas
+        for (final a in _timeProvider.addresses) {
+          AddressStore.add(a);
+          if (!filterItems.contains(a)) filterItems.add(a);
+          if (!addressCards.contains(a)) addressCards.add(a);
+        }
+      });
+    });
 
     // Store’daki adresleri dropdown’a çek
     for (final a in AddressStore.items) {
@@ -195,73 +215,90 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _runDemoRoute() {
-    // Eğer başlangıç hiç seçilmediyse, null kalsın (START)
-    // İstersen default olarak dropped.first yapabilirsin:
-    // selectedStartAddress ??= dropped.isNotEmpty ? dropped.first : null;
-
     showDialog(
       context: context,
       builder: (_) {
         return StatefulBuilder(
           builder: (ctx, setLocal) {
-            final result = buildBestRouteDemo(
-              dropped,
-              startAddress: selectedStartAddress,
-            );
-
-            return AlertDialog(
-              title: const Text('Örnek Rota (Süre Minimizasyonu)'),
-              content: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Başlangıç Adresi',
-                      style: TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF6F7F6),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.black12),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String?>(
-                          value: selectedStartAddress,
-                          isExpanded: true,
-                          items: [
-                            const DropdownMenuItem<String?>(
-                              value: null,
-                              child: Text('START (Cihaz konumu)'),
-                            ),
-                            ...dropped.map(
-                              (a) => DropdownMenuItem<String?>(
-                                value: a,
-                                child: Text(a, overflow: TextOverflow.ellipsis),
-                              ),
-                            ),
-                          ],
-                          onChanged: (v) {
-                            setLocal(() => selectedStartAddress = v);
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Text('Toplam süre: ${result.totalMinutes} dk'),
-                    const SizedBox(height: 10),
-                    Text(result.prettyPath),
-                  ],
-                ),
+            return FutureBuilder<RouteResult>(
+              future: _planner.buildBestRoute(
+                dropped,
+                startAddress: selectedStartAddress,
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Kapat'),
-                ),
-              ],
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const AlertDialog(
+                    title: Text('Örnek Rota (Süre Minimizasyonu)'),
+                    content: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: SizedBox(
+                        height: 40,
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                    ),
+                  );
+                }
+
+                final result = snapshot.data!;
+
+                return AlertDialog(
+                  title: const Text('Örnek Rota (Süre Minimizasyonu)'),
+                  content: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Başlangıç Adresi',
+                          style: TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF6F7F6),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.black12),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String?>(
+                              value: selectedStartAddress,
+                              isExpanded: true,
+                              items: [
+                                const DropdownMenuItem<String?>(
+                                  value: null,
+                                  child: Text('START (Cihaz konumu)'),
+                                ),
+                                ...dropped.map(
+                                  (a) => DropdownMenuItem<String?>(
+                                    value: a,
+                                    child: Text(
+                                      a,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              onChanged: (v) {
+                                setLocal(() => selectedStartAddress = v);
+                              },
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Text('Toplam süre: ${result.totalMinutes} dk'),
+                        const SizedBox(height: 10),
+                        Text(result.prettyPath),
+                      ],
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Kapat'),
+                    ),
+                  ],
+                );
+              },
             );
           },
         );
@@ -521,130 +558,4 @@ class _InfoSection extends StatelessWidget {
       ),
     );
   }
-}
-
-/// ===============================
-///  DEMO ROTA ALGORİTMASI
-///  Nearest Neighbor + 2-opt
-///  Başlangıç adresi seçilebilir
-/// ===============================
-
-class RouteResult {
-  RouteResult({required this.path, required this.totalMinutes});
-  final List<String> path;
-  final int totalMinutes;
-
-  String get prettyPath => path.join(' → ');
-}
-
-// Aynı adres çiftine stabil “süre” üret (demo)
-int _stableMinutes(String a, String b) {
-  int hash = 0;
-  final s = '$a|$b';
-  for (int i = 0; i < s.length; i++) {
-    hash = (hash * 31 + s.codeUnitAt(i)) & 0x7fffffff;
-  }
-  // 6–38 dk arası
-  return 6 + (hash % 33);
-}
-
-int _time(String a, String b) {
-  if (a == b) return 0;
-  return _stableMinutes(a, b);
-}
-
-int _tourCost(List<String> path) {
-  int sum = 0;
-  for (int i = 0; i < path.length - 1; i++) {
-    sum += _time(path[i], path[i + 1]);
-  }
-  return sum;
-}
-
-// ✅ Başlangıç parametreli nearest neighbor turu
-List<String> _nearestNeighborTour(List<String> stops, String start) {
-  final unvisited = stops.toSet();
-
-  // start stops içinde yoksa ekle
-  if (!unvisited.contains(start)) {
-    unvisited.add(start);
-  }
-
-  unvisited.remove(start);
-
-  final route = <String>[start];
-
-  String current = start;
-  while (unvisited.isNotEmpty) {
-    String? best;
-    int bestCost = 1 << 30;
-
-    for (final cand in unvisited) {
-      final c = _time(current, cand);
-      if (c < bestCost) {
-        bestCost = c;
-        best = cand;
-      }
-    }
-
-    route.add(best!);
-    unvisited.remove(best);
-    current = best;
-  }
-
-  route.add(start); // geri dön
-  return route;
-}
-
-List<String> _twoOpt(List<String> path) {
-  if (path.length <= 4) return path;
-
-  bool improved = true;
-  List<String> best = List<String>.from(path);
-  int bestCost = _tourCost(best);
-
-  while (improved) {
-    improved = false;
-
-    for (int i = 1; i < best.length - 2; i++) {
-      for (int k = i + 1; k < best.length - 1; k++) {
-        final candidate = <String>[
-          ...best.sublist(0, i),
-          ...best.sublist(i, k + 1).reversed,
-          ...best.sublist(k + 1),
-        ];
-
-        final candCost = _tourCost(candidate);
-        if (candCost < bestCost) {
-          best = candidate;
-          bestCost = candCost;
-          improved = true;
-        }
-      }
-    }
-  }
-
-  return best;
-}
-
-RouteResult buildBestRouteDemo(List<String> dropped, {String? startAddress}) {
-  final stops = dropped
-      .map((e) => e.trim())
-      .where((e) => e.isNotEmpty)
-      .toSet()
-      .toList();
-
-  // start seçildiyse ve stops içinde varsa onu kullan, yoksa START
-  final String start = (startAddress != null && stops.contains(startAddress))
-      ? startAddress
-      : 'START';
-
-  // Eğer start bir adresse, zaten stops içinde.
-  // Eğer START ise, START'ı düğüm gibi düşünerek tur atıyoruz.
-  final List<String> nodes = (start == 'START') ? ['START', ...stops] : stops;
-
-  final nn = _nearestNeighborTour(nodes, start);
-  final improved = _twoOpt(nn);
-
-  return RouteResult(path: improved, totalMinutes: _tourCost(improved));
 }
